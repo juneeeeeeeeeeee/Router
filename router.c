@@ -99,7 +99,10 @@ int main(int argc, char** argv) {
     }
     fclose(inputFile2);
 
-    printf("um\n");
+    FILE* outputFile = fopen("output.txt", "w");
+    heap hp;
+    hp.size = 0;
+    hp.arr = (cell*)malloc((x_size * y_size * 2 + 1) * sizeof(cell));
     // Routing using Dijkstra's algorithm
     for (int n = 1; n <= net_count; n++) {
         // reset map
@@ -113,9 +116,7 @@ int main(int argc, char** argv) {
             }
         }
         bool reached = false;
-        heap hp;
-        hp.size = 0;
-        hp.arr = (cell*)malloc((x_size * y_size * 2 + 1) * sizeof(cell));
+        
         map[nets[n].source_layer][nets[n].source_y][nets[n].source_x].cell_cost = 1; // ensure starting cell is not an obstacle
         map[nets[n].target_layer][nets[n].target_y][nets[n].target_x].cell_cost = 1; // ensure target cell is not an obstacle
         map[nets[n].source_layer][nets[n].source_y][nets[n].source_x].path_cost = 1;
@@ -125,35 +126,31 @@ int main(int argc, char** argv) {
             cell current = heap_pop(&hp);
             if (current.layer == nets[n].target_layer && current.x == nets[n].target_x && current.y == nets[n].target_y) { // reached target
                 reached = true;
-                // cell* reversed_path = (cell*)malloc((current.length + 1) * sizeof(cell));
+                cell* reversed_path = (cell*)malloc(current.length * sizeof(cell));
 
                 // do backtracking and cleanup
-                cell jun = current;
-                cell um = map[current.layer + dz[current.pred]][current.y + dy[current.pred]][current.x + dx[current.pred]];
-                printf("%d %d %d\n", jun.layer, jun.x, jun.y);
-                while (um.layer != nets[n].source_layer || um.x != nets[n].source_x || um.y != nets[n].source_y) {
-                    map[jun.layer][jun.y][jun.x].cell_cost = -1; // mark as obstacle
-                    if (um.layer != jun.layer) { // via
-                        printf("3 %d %d\n", um.x, um.y);
+                cell tracking = current;
+                while (tracking.layer != nets[n].source_layer || tracking.x != nets[n].source_x || tracking.y != nets[n].source_y) {
+                    map[tracking.layer][tracking.y][tracking.x].cell_cost = -1; // mark as obstacle
+                    reversed_path[map[tracking.layer][tracking.y][tracking.x].length - 1] = map[tracking.layer][tracking.y][tracking.x];
+                    int pd = map[tracking.layer][tracking.y][tracking.x].pred;
+                    tracking = map[tracking.layer + dz[pd]][tracking.y + dy[pd]][tracking.x + dx[pd]];
+                }
+                map[tracking.layer][tracking.y][tracking.x].cell_cost = -1; // mark as obstacle
+                reversed_path[0] = map[tracking.layer][tracking.y][tracking.x];
+                
+                fprintf(outputFile, "%d\n", n);
+                for (int i = 0; i < current.length; i++) {
+                    fprintf(outputFile, "%d %d %d\n", reversed_path[i].layer, reversed_path[i].x, reversed_path[i].y);
+                    if (i != current.length - 1 && reversed_path[i].layer != reversed_path[i + 1].layer) { // via
+                        fprintf(outputFile, "3 %d %d\n", reversed_path[i].x, reversed_path[i].y);
                     }
-                    else {
-                        printf("%d %d %d\n", um.layer, um.x, um.y);
-                    }
-                    jun = um;
-                    um = map[um.layer + dz[um.pred]][um.y + dy[um.pred]][um.x + dx[um.pred]];
                 }
-                map[um.layer][um.y][um.x].cell_cost = -1; // mark as obstacle
-                if (um.layer != jun.layer) { // via
-                    printf("3 %d %d\n", um.x, um.y);
-                }
-                else {
-                    printf("%d %d %d\n", um.layer, um.x, um.y);
-                }
-
-                printf("Reached target (%d, %d, %d) with path cost %d\n", current.layer, current.x, current.y, current.path_cost);
+                free(reversed_path);
+                // debugging
+                // printf("Cost: %d\n", current.path_cost);
                 break;
             }
-            printf("Visiting cell (%d, %d, %d) with path cost %d\n", current.layer, current.x, current.y, current.path_cost);
             for (int dir = 0; dir < 6; dir++) {
                 int nx = current.x + dx[dir];
                 int ny = current.y + dy[dir];
@@ -167,15 +164,19 @@ int main(int argc, char** argv) {
                 map[nl][ny][nx].length = map[current.layer][current.y][current.x].length + 1;
                 map[nl][ny][nx].pred = 5 - dir;
                 if (dir == 0 || dir == 5) map[nl][ny][nx].path_cost += via_cost;
-                // else if (map[current.layer][current.y][current.x].pred != 5 - dir) map[nl][ny][nx].path_cost += bend_cost;
+                else if (map[current.layer][current.y][current.x].pred != 0 && map[current.layer][current.y][current.x].pred != 5 && dir != 5 - map[current.layer][current.y][current.x].pred) map[nl][ny][nx].path_cost += bend_cost; // bend cost
                 heap_push(&hp, map[nl][ny][nx]);
             }
         }
-        free(hp.arr);
+        if (reached == false) {
+            // printf("%d failed\n", n);
+            fprintf(outputFile, "%d\n", n);
+        }
+        fprintf(outputFile, "0\n"); // end of net
     }
-    // debugging
-    printf("%d %d\n", map[nets[0].target_layer][nets[0].target_y][nets[0].target_x].path_cost, map[nets[0].target_layer][nets[0].target_y][nets[0].target_x].pred);
-    for (int z = 0; z < 2; z++) {
+    
+    free(hp.arr);
+    for (int z = 1; z <= 2; z++) {
         for (int y = 0; y < y_size; y++) free(map[z][y]);
         free(map[z]);
     }
